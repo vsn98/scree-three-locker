@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import MySQLdb
+import hashlib
 from threading import Thread
 import threading
 import time
@@ -14,6 +15,7 @@ from twilio.rest import Client
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 GPIO.setup(13,GPIO.OUT)
+GPIO.setup(19,GPIO.OUT)
 
 try:
 	# python 2
@@ -32,9 +34,9 @@ class Fullscreen_Window:
 	global dbPass
 	
 	dbHost = 'localhost'
-	dbName = 'DB_NAME'
-	dbUser = 'USER'
-	dbPass = 'PASSWORD'
+	dbName = 'door_lock'
+	dbUser = 'admin'
+	dbPass = 'password'
 	
 	def __init__(self):
 		self.tk = tk.Tk()
@@ -80,6 +82,7 @@ class Fullscreen_Window:
 		
 	def returnToIdle_fromAccessGranted(self):
 		GPIO.output(13,GPIO.LOW)
+                GPIO.output(19,GPIO.LOW)
 		self.SMSresultLabel.grid_forget()
 		self.show_idle()
 		
@@ -136,6 +139,8 @@ class Fullscreen_Window:
 							else:
 								user_info = cur.fetchone()
 								userPin = user_info['pin']
+                                                                global gPin
+                                                                gPin = int(user_info['gpio'])
 								self.welcomeLabel.grid_forget()
 								self.validUser = ttk.Label(self.tk, text="Welcome\n %s!" % (user_info['name']), font='size, 15', justify='center', anchor='center')
 								self.validUser.grid(columnspan=3, sticky=tk.W+tk.E)
@@ -205,8 +210,9 @@ class Fullscreen_Window:
 		if pinLength == 6:
 			self.PINentrytimeout.cancel()
 			self.pin_entry_forget()
-			
-			if pin == userPin:
+			hashPin=hashlib.md5(pin.encode('utf-8')).hexdigest()
+
+			if hashPin == userPin:
 				pin_granted = 1
 			else:
 				pin_granted = 0
@@ -217,7 +223,7 @@ class Fullscreen_Window:
 			cur.execute("UPDATE access_log SET pin_entered = '%s', pin_entered_datetime = NOW(), pin_granted = %s, mobile_number = '%s' WHERE access_id = %s" % (pin, pin_granted, mobileNumber, accessLogId))
 			dbConnection.commit()
 			
-			if pin == userPin:
+			if hashPin == userPin:
 				self.PINresultLabel = ttk.Label(self.tk, text="Thank You, Now\nPlease Enter Code\nfrom SMS\n")
 				self.PINresultLabel.config(font='size, 20', justify='center', anchor='center')
 				self.PINresultLabel.grid(columnspan=3, sticky=tk.W+tk.E, pady=20)
@@ -296,7 +302,7 @@ class Fullscreen_Window:
 				
 				self.PINresultLabel.grid_forget()
 				self.smsDigitsLabel.grid_forget()
-				GPIO.output(13,GPIO.HIGH)
+				GPIO.output(gPin,GPIO.HIGH)
 				
 				self.doorOpenTimeout = threading.Timer(10, self.returnToIdle_fromAccessGranted)
 				self.doorOpenTimeout.start()
